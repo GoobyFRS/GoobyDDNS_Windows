@@ -21,6 +21,12 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Determine application version
+        shell: powershell
+        run: |
+          $version = python -c "from pathlib import Path; import re; text = Path('goobyddns/app.py').read_text(encoding='utf-8'); match = re.search(r'APP_VERSION\\s*=\\s*[\"\\']([^\"\\']+)[\"\\']', text); print(match.group(1) if match else 'dev')"
+          "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Install dependencies
         shell: powershell
         run: |
@@ -31,6 +37,7 @@ jobs:
       - name: Build GoobyDDNS executable
         shell: powershell
         run: |
+          $artifactName = "GoobyDDNS-$env:APP_VERSION"
           pyinstaller --onefile --noconsole `
             --icon "assets/icon.ico" `
             --hidden-import requests `
@@ -38,25 +45,26 @@ jobs:
             --hidden-import PIL `
             --add-data "template.ini;." `
             --add-data "assets/icon.ico;assets" `
-            --name GoobyDDNS app.py
+            --name $artifactName app.py
 
       - name: Prepare release payload
         shell: powershell
         run: |
+          $artifactName = "GoobyDDNS-$env:APP_VERSION"
           New-Item -ItemType Directory -Force -Path release | Out-Null
-          Copy-Item "dist\GoobyDDNS.exe" -Destination "release\GoobyDDNS.exe"
+          Copy-Item "dist\$artifactName.exe" -Destination "release\$artifactName.exe"
           Get-ChildItem "release"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: GoobyDDNS-Windows
-          path: release/GoobyDDNS.exe
+          name: GoobyDDNS-Windows-${{ env.APP_VERSION }}
+          path: release/GoobyDDNS-${{ env.APP_VERSION }}.exe
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: GoobyDDNS Build ${{ github.run_number }}
-          files: release/GoobyDDNS.exe
+          name: GoobyDDNS Build ${{ github.run_number }} (${{ env.APP_VERSION }})
+          files: release/GoobyDDNS-${{ env.APP_VERSION }}.exe
           generate_release_notes: true
